@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BrickBrawl 1v1</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Lilita+One&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css"></head><body>
+<div id="hud">
+ <div class="bars">
+  <div class="bar"><b id="n1">YOU</b><div class="t"><i id="hp1"></i></div><div class="t s"><i id="ar1"></i></div></div>
+  <div id="score">0 - 0</div>
+  <div class="bar r"><b id="n2">BOT</b><div class="t"><i id="hp2"></i></div><div class="t s"><i id="ar2"></i></div></div>
+ </div>
+ <div id="tip">Click the screen to lock your mouse</div>
+ <div id="cross"></div><div id="msg"></div>
+ <div id="bot"><span id="wn"></span><br><span id="ab"></span></div>
+</div>
+<div id="hurt"></div>
+<div id="menu"><div class="card">
+ <h1>BRICKBRAWL</h1><p class="s">1v1 brick arena. First to 2 rounds wins.</p>
+ <h3>Weapon</h3><div class="row" id="wsel"></div>
+ <h3>Character (Q = special ability)</h3><div class="grid" id="csel"></div>
+ <button id="go">Fight</button>
+ <div class="help">WASD move &middot; Space jump &middot; Mouse aim &middot; Left click shoot &middot; Right click or F hammer smash &middot; Q ability &middot; Walk into gold chests for health and armor. Arrow keys also turn the camera if the mouse won't lock.</div>
+</div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="js/game.js"></script>
+<script src="js/polish.js"></script>
+<script src="js/hold.js"></script>
+<script src="js/arsenal.js"></script>
+<script src="js/town.js"></script>
+<script src="js/roster.js"></script>
+<script src="js/minifig.js"></script>
+<script src="js/progress.js"></script>
+<script src="js/levels.js"></script>
+<script src="js/loadout.js"></script>
+<script src="js/pickups.js"></script>
+<script src="js/nav.js"></script>
+<script src="js/logo.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/gfx.js"></script>
+<script src="js/title.js"></script></body></html>
