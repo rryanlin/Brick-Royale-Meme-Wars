@@ -19,7 +19,8 @@ const menu=$('menu'),go=$('go');
 function vBusy(msg,cancel){box('<h2>ONLINE</h2><div class="spin"></div><p>'+esc(msg)+'</p>'+(cancel?'<div class="wbtn"><button id="oc">Cancel</button></div>':''));if(cancel)bind('oc',cancel)}
 function vErr(msg,btns){box('<h2>HOLD ON</h2><p class="oerr">'+esc(msg)+'</p><div class="wbtn" id="obt"></div>');const b=$('obt');
  (btns||[['OK',()=>endSession(true)]]).forEach(([t,f])=>{const x=document.createElement('button');x.textContent=t;x.onclick=f;b.appendChild(x)})}
-const netErr=()=>vErr(Supa.configured()?'Could not reach the online service. Check your connection and try again.':'Online play is not set up yet.',[['OK',()=>endSession(true)]]);
+const why=e=>{if(!e)return '';const m=String(e.message||e);if(/anonymous/i.test(m))return ' Fix: in Supabase turn on Authentication > Sign In / Providers > Allow anonymous sign-ins.';if(/Could not find the function|schema cache|does not exist|relation/i.test(m)||e.status===404)return ' Fix: run setup.sql in the Supabase SQL Editor.';if(e.status===401||e.status===403||/jwt|api key|apikey|permission/i.test(m))return ' Check the key in js/config.js and that setup.sql was run.';if(m==='network'||/failed to fetch|networkerror|load failed/i.test(m))return ' The browser could not connect. Check the project URL in js/config.js and that the Supabase project is not paused.';return ''};
+const netErr=e=>vErr(Supa.configured()?'Could not reach the online service.'+why(e)+(e?' ['+String(e.message||e).slice(0,160)+(e.status?' / '+e.status:'')+']':''):'Online play is not set up yet.',[['OK',()=>endSession(true)]]);
 function vSearch(){box('<h2>FINDING A MATCH</h2><div class="rk">Your rank: '+chip(RK.r)+' <small>'+RK.w+'W '+RK.l+'L</small></div><div class="spin"></div><p id="osr">Searching near your rank&hellip; 0s</p><small>The search widens the longer you wait.</small><div class="wbtn"><button id="oc">Cancel</button></div>');bind('oc',cancelSearch)}
 function vParty(code){const link=inviteLink(code);box('<h2>YOUR PARTY</h2><p>Give your friend this code:</p><div class="pcode" id="opc">'+esc(code)+'</div><div class="wbtn"><button id="ocp">Copy code</button><button id="ocl">Copy invite link</button></div><div class="spin sm"></div><p id="ops">Waiting for a friend to join&hellip;</p><div class="wbtn"><button id="oc">Leave party</button></div>');
  bind('oc',()=>endSession(true));const cp=(id,txt,msg)=>bind(id,()=>{try{navigator.clipboard.writeText(txt).then(()=>$('ops').textContent=msg,()=>$('ops').textContent=txt)}catch(e){$('ops').textContent=txt}});cp('ocp',code,'Code copied. Waiting for a friend to join…');cp('ocl',link,'Invite link copied. Waiting for a friend to join…')}
@@ -31,11 +32,11 @@ const inviteLink=code=>{try{return location.origin+location.pathname+'?join='+co
 async function ranked(){
  if(!window.Supa||!Supa.configured())return netErr();
  vBusy('Connecting to the online service…');
- try{setRK(await Supa.rpc('ensure_player'))}catch(e){return netErr()}
+ try{setRK(await Supa.rpc('ensure_player'))}catch(e){return netErr(e)}
  S={kind:'rank',phase:'search'};Q={on:true,t0:Date.now()};vSearch();
  tk=setInterval(()=>{const e=$('osr');if(e)e.innerHTML='Searching near your rank&hellip; '+Math.round((Date.now()-Q.t0)/1000)+'s'},500);
  try{while(Q.on){const r=await Supa.rpc('find_match');if(!Q.on)break;if(r&&r.match){clearInterval(tk);Q.on=false;return foundRanked(r)}await sleep(2000)}}
- catch(e){if(Q.on){Q.on=false;clearInterval(tk);netErr()}}
+ catch(e){if(Q.on){Q.on=false;clearInterval(tk);netErr(e)}}
  clearInterval(tk)}
 function cancelSearch(){Q.on=false;clearInterval(tk);Supa.rpc('leave_queue').catch(()=>{});endSession(true)}
 async function foundRanked(r){
@@ -49,7 +50,7 @@ async function foundRanked(r){
 async function createParty(){
  if(!window.Supa||!Supa.configured())return netErr();
  vBusy('Creating your party…');let code;
- try{code=await Supa.rpc('party_create')}catch(e){return netErr()}
+ try{code=await Supa.rpc('party_create')}catch(e){return netErr(e)}
  S={kind:'party',phase:'lobby',role:'host',code,room:'P-'+code};vParty(code);
  const me=S;poll=setInterval(async()=>{if(S!==me){clearInterval(poll);return}
   try{const st=await Supa.rpc('party_status',{p_code:code});if(S!==me)return;
@@ -62,7 +63,7 @@ function joinPrompt(code){S={kind:'party',phase:'join',role:'guest'};vJoin();if(
 async function submitJoin(){const code=($('oj').value||'').trim().toUpperCase();if(code.length<5){$('ojm').textContent='Enter the 5-letter code.';return}
  if(!window.Supa||!Supa.configured())return netErr();
  const me=S;vBusy('Joining party '+code+'…');let r;
- try{r=await Supa.rpc('party_join',{p_code:code})}catch(e){return netErr()}
+ try{r=await Supa.rpc('party_join',{p_code:code})}catch(e){return netErr(e)}
  if(S!==me)return;
  if(!r||!r.ok){vJoin(r&&r.err==='full'?'That party is full.':r&&r.err==='self'?'That is your own party. Send the code to a friend.':'No party found with that code. Check it and try again.');return}
  S.code=code;S.room=r.room;S.phase='link';vBusy('Connecting to your friend…');
