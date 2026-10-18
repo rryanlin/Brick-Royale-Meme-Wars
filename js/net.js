@@ -1,4 +1,4 @@
-/* Online play, in-match sync. Two players, peer to peer: each browser simulates its own fighter and reports it ~20 times a second,
+/* Online play, in-match sync. Two players, relayed through Supabase Realtime (rtc.js): each browser simulates its own fighter and reports it ~20 times a second,
    shots / melee / airstrikes / grenades go as events, and every hit is decided by the player being hit (the victim is authoritative),
    so nobody can be hurt by a lag-ghost. The opponent is the game's "E" entity, driven by the other player's reports instead of the bot.
    Lobbies, matchmaking and ranked live in online.js. */
@@ -36,7 +36,7 @@ function onMsg(m){if(!m||typeof m!=='object')return;NET.lastRx=performance.now()
   default:NET.onFlow&&NET.onFlow(m)}}
 NET.onMsg=onMsg;
 
-function recvFire(m){const w=WPN(m.w,m.l),lat=Math.min(.12,(NET.rtt||60)/2000);
+function recvFire(m){const w=WPN(m.w,m.l),lat=Math.min(.2,(NET.rtt||60)/2000+((NET.conn&&NET.conn.extra)||0));
  for(const b of m.b){const p=new THREE.Vector3(b[0],b[1],b[2]),v=new THREE.Vector3(b[3],b[4],b[5]),q=new THREE.Vector3(b[6],b[7],b[8]);
   const me=new THREE.Mesh(w.rocket?rg:bg,w.rocket?rm:bm);me.position.copy(p);me.lookAt(p.clone().add(v));S.add(me);
   p.addScaledVector(v,lat);bl.push({m:me,p,q,v,life:w.life-lat,e:E,w})}
@@ -44,7 +44,7 @@ function recvFire(m){const w=WPN(m.w,m.l),lat=Math.min(.12,(NET.rtt||60)/2000);
 
 // ---- the opponent: the bot's slot is driven by their reports
 function netBot(dt){const s=NET.rs;if(!s)return;
- const age=Math.min(.12,(performance.now()-s.at)/1000),tx=s.x+s.vx*age,tz=s.z+s.vz*age,k=Math.min(1,1-Math.exp(-dt*16)),far=Math.hypot(tx-E.x,tz-E.z)>5;
+ const age=Math.min(.25,(performance.now()-s.at)/1000),tx=s.x+s.vx*age,tz=s.z+s.vz*age,k=Math.min(1,1-Math.exp(-dt*16)),far=Math.hypot(tx-E.x,tz-E.z)>5;
  E.x=far?tx:E.x+(tx-E.x)*k;E.z=far?tz:E.z+(tz-E.z)*k;E.y=far?s.y:E.y+(s.y-E.y)*Math.min(1,k*1.5);
  E.yaw=lerpA(E.yaw,s.yaw,Math.min(1,k*1.4));E.pitch+=(s.pitch-E.pitch)*k;E.cr=(E.cr||0)+(s.cr-(E.cr||0))*k;
  E.vx=s.vx;E.vz=s.vz;E.vy=0;E.gr=!!s.gr;E.blk=false;E.mel=!!s.mel;
@@ -68,7 +68,7 @@ const _rr=resetRound;resetRound=function(i){if(NET.on)NET.reseed(NET.rounds++);_
 const _step=step;step=function(dt){_step(dt);if(!NET.on||mode!=='play')return;const n=performance.now();
  if(n-NET.ls>=50){NET.ls=n;send({t:'s',x:r2(P.x),y:r2(P.y),z:r2(P.z),a:r2(P.yaw),p:r2(P.pitch),c:r2(P.cr||0),vx:r2(P.vx),vz:r2(P.vz),g:P.gr?1:0,hp:r2(P.hp),ar:r2(P.ar),sh:r2(P.sh),ml:P.mel?1:0,w:P.w.id,l:P.w.lv||1})}
  if(n-NET.lp>=2000){NET.lp=n;send({t:'p',ts:n})}
- if(n-NET.lastRx>9000&&!NET.fin){NET.fin=true;NET.onDrop&&NET.onDrop('timeout')}
+ if(n-NET.lastRx>9000&&!NET.fin){NET.onDrop&&NET.onDrop('timeout');NET.fin=true}
  hud(n)};
 
 // ---- small in-match HUD: ping and a leave button

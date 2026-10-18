@@ -1,5 +1,5 @@
 /* Online lobby: Play Ranked (Supabase queue + server-kept rating), Create / Join a Party (code or invite link),
-   the "both ready" handshake and the results screen. In-match sync is in net.js, the direct connection in rtc.js. */
+   the "both ready" handshake and the results screen. In-match sync is in net.js, the Supabase Realtime link in rtc.js. */
 (()=>{
 const TIERS=[['Bronze',0,'#d08a4b'],['Silver',900,'#cfd8e0'],['Gold',1100,'#ffd02f'],['Platinum',1300,'#5fe0d0'],['Diamond',1500,'#6bb8ff'],['Legend',1700,'#ff5ad1']];
 const tierOf=r=>{let t=TIERS[0];for(const x of TIERS)if(r>=x[1])t=x;return t},tierName=r=>tierOf(r)[0];
@@ -44,7 +44,7 @@ async function foundRanked(r){
  vBusy('Opponent found ('+tierName(r.opp_rating)+', '+r.opp_rating+'). Connecting…');
  try{const c=await RTC.link({room:r.match,offerer:r.host});if(!S||S.matchId!==r.match)return c.close();matched(c)}
  catch(e){const m=S&&S.matchId;Supa.rpc('cancel_match',{p_match:m}).catch(()=>{});
-  vErr('Could not open a direct connection to your opponent (some networks block peer-to-peer play). No rating was changed.',[['Search again',()=>{endSession(false);ranked()}],['Cancel',()=>endSession(true)]])}}
+  vErr('Could not connect to your opponent through the game server. No rating was changed.',[['Search again',()=>{endSession(false);ranked()}],['Cancel',()=>endSession(true)]])}}
 
 // ---------------------------------------------------------------- parties
 async function createParty(){
@@ -57,7 +57,7 @@ async function createParty(){
    if(!st||!st.open){clearInterval(poll);vErr('Your party closed. Create a new one.',[['OK',()=>endSession(true)]]);return}
    if(st.guest){clearInterval(poll);S.phase='link';vBusy('Friend joined! Connecting…');
     try{const c=await RTC.link({room:S.room,offerer:true});if(S!==me)return c.close();matched(c)}
-    catch(e){vErr('Could not open a direct connection to your friend (some networks block peer-to-peer play).',[['OK',()=>endSession(true)]])}}}
+    catch(e){vErr('Could not connect to your friend through the game server. Check Supabase Realtime is on (see README) and try again.',[['OK',()=>endSession(true)]])}}}
   catch(e){}},1000)}
 function joinPrompt(code){S={kind:'party',phase:'join',role:'guest'};vJoin();if(code){$('oj').value=code;submitJoin()}}
 async function submitJoin(){const code=($('oj').value||'').trim().toUpperCase();if(code.length<5){$('ojm').textContent='Enter the 5-letter code.';return}
@@ -68,7 +68,7 @@ async function submitJoin(){const code=($('oj').value||'').trim().toUpperCase();
  if(!r||!r.ok){vJoin(r&&r.err==='full'?'That party is full.':r&&r.err==='self'?'That is your own party. Send the code to a friend.':'No party found with that code. Check it and try again.');return}
  S.code=code;S.room=r.room;S.phase='link';vBusy('Connecting to your friend…');
  try{const c=await RTC.link({room:r.room,offerer:false,after:r.head||0});if(S!==me)return c.close();matched(c)}
- catch(e){vErr('Could not open a direct connection to your friend (some networks block peer-to-peer play).',[['OK',()=>endSession(true)]])}}
+ catch(e){vErr('Could not connect to your friend through the game server. Check Supabase Realtime is on (see README) and try again.',[['OK',()=>endSession(true)]])}}
 
 // ---------------------------------------------------------------- connected: pick fighters, both press Ready
 function matched(conn){NET.conn=conn;NET.role=S.role;NET.opp={rk:S.oppRating,setup:null};

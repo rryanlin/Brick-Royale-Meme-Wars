@@ -7,8 +7,8 @@ async function post(path,body,tok){const r=await fetch(C.SUPABASE_URL+path,{meth
  const t=await r.text();let j=null;try{j=t?JSON.parse(t):null}catch(e){}
  if(!r.ok){const er=new Error((j&&(j.message||j.msg||j.error_description||j.hint))||('HTTP '+r.status));er.status=r.status;er.body=j;throw er}return j}
 const stamp=s=>{s.expires_at=s.expires_at||Math.floor(Date.now()/1000)+(s.expires_in||3600);return s};
-function auth(){if(!C.SUPABASE_URL||!C.SUPABASE_KEY)return Promise.reject(new Error('not configured'));
- if(ses&&ses.access_token&&ses.expires_at-Date.now()/1000>60)return Promise.resolve(ses);
+function auth(min){if(!C.SUPABASE_URL||!C.SUPABASE_KEY)return Promise.reject(new Error('not configured'));
+ if(ses&&ses.access_token&&ses.expires_at-Date.now()/1000>(min||60))return Promise.resolve(ses);
  if(inflight)return inflight;
  inflight=(async()=>{try{
   if(ses&&ses.refresh_token){try{ses=stamp(await post('/auth/v1/token?grant_type=refresh_token',{refresh_token:ses.refresh_token}));save();return ses}catch(e){if(!e.status||e.status>=500)throw e;ses=null}}
