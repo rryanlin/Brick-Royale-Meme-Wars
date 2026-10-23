@@ -6,6 +6,7 @@
 --   queue     the ranked waiting room.
 --   matches   one row per ranked match, and who said they won.
 --   parties   private party codes.
+--   fill_queue  the Duos / Trios "Fill" waiting room.
 --   signals   short-lived messages two players swap to open a direct connection.
 -- Everything is reached through the functions at the bottom. The tables themselves are locked down.
 
@@ -17,6 +18,13 @@ create table if not exists public.players (
   losses int not null default 0,
   created_at timestamptz not null default now()
 );
+
+-- round 22: profile numbers for the leaderboards (level / games won / kills are what each player's game reports after online matches, see sync_profile below)
+alter table public.players add column if not exists name text;
+alter table public.players add column if not exists xp bigint not null default 0;
+alter table public.players add column if not exists games_won int not null default 0;
+alter table public.players add column if not exists kills int not null default 0;
+alter table public.players add column if not exists holder boolean not null default false;
 
 create table if not exists public.queue (
   player_id uuid primary key references auth.users(id) on delete cascade,
@@ -61,19 +69,31 @@ create table if not exists public.signals (
 create index if not exists signals_room_idx on public.signals (room, id);
 create index if not exists signals_created_idx on public.signals (created_at);
 
+-- round 31: the Duos / Trios "Fill" waiting room (players with no party who want real teammates)
+create table if not exists public.fill_queue (
+  player_id uuid primary key references auth.users(id) on delete cascade,
+  kind text not null,                       -- 'duos' or 'trios'
+  joined_at timestamptz not null default now(),
+  seen_at timestamptz not null default now(),
+  squad_id text,                            -- set when a squad has been formed
+  seat int,
+  sz int
+);
+
 -- ---------------------------------------------------------------- locked down tables
 alter table public.players enable row level security;
 alter table public.queue   enable row level security;
 alter table public.matches enable row level security;
 alter table public.parties enable row level security;
 alter table public.signals enable row level security;
+alter table public.fill_queue enable row level security;
 
 drop policy if exists players_read on public.players;
 create policy players_read on public.players for select to authenticated using (true);   -- ratings are public (leaderboard later)
 drop policy if exists matches_read on public.matches;
 create policy matches_read on public.matches for select to authenticated using (auth.uid() in (p1, p2));
 -- queue, parties and signals have no policies, so only the functions below can touch them
-revoke all on public.players, public.queue, public.matches, public.parties, public.signals from anon, authenticated;
+revoke all on public.players, public.queue, public.matches, public.parties, public.signals, public.fill_queue from anon, authenticated;
 grant select on public.players, public.matches to authenticated;   -- read-only; every change goes through the functions
 
 -- ---------------------------------------------------------------- internal helpers (not callable from the game)
@@ -279,6 +299,51 @@ begin
   update parties set guest = null where code = upper(trim(p_code)) and guest = uid;
 end $$;
 
+-- ---------------------------------------------------------------- Duos / Trios fill (round 31)
+-- Call every ~2 seconds while waiting. Returns {status:'wait', waiting} until a squad forms, then {status:'match', id, seat, size}.
+-- A full squad (2 for Duos, 3 for Trios) forms as soon as enough players of the same kind wait. After a while the game passes
+-- p_force = true, which forms a smaller squad out of whoever is waiting (the empty seats become CPU teammates).
+create or replace function public.fill_join(p_kind text, p_force boolean default false) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare
+  uid uuid := auth.uid(); need int; me fill_queue; ids uuid[]; n int; sid text;
+begin
+  if uid is null then raise exception 'not signed in'; end if;
+  if p_kind not in ('duos', 'trios') then raise exception 'bad kind'; end if;
+  need := case p_kind when 'duos' then 2 else 3 end;
+  delete from fill_queue where player_id <> uid and (
+    (squad_id is null and seen_at < now() - interval '12 seconds') or (squad_id is not null and seen_at < now() - interval '90 seconds'));
+  insert into fill_queue (player_id, kind) values (uid, p_kind)
+    on conflict (player_id) do update set seen_at = now();
+  select * into me from fill_queue where player_id = uid for update;
+  if me.kind <> p_kind and me.squad_id is null then   -- changed their mind between Duos and Trios
+    update fill_queue set kind = p_kind, joined_at = now() where player_id = uid returning * into me;
+  end if;
+  if me.squad_id is not null then
+    return jsonb_build_object('status', 'match', 'id', me.squad_id, 'seat', me.seat, 'size', me.sz);
+  end if;
+  select array_agg(player_id) into ids from (
+    select player_id from fill_queue
+      where kind = p_kind and squad_id is null and player_id <> uid and seen_at > now() - interval '12 seconds'
+      order by joined_at limit need - 1 for update skip locked) s;
+  n := coalesce(array_length(ids, 1), 0);
+  if n >= need - 1 or (p_force and n >= 1) then
+    sid := substr(md5(random()::text || clock_timestamp()::text), 1, 10);
+    ids := ids || uid;
+    update fill_queue f set squad_id = sid, sz = n + 1, seat = r.rn - 1
+      from (select player_id, row_number() over (order by joined_at, player_id) rn from fill_queue where player_id = any(ids)) r
+      where f.player_id = r.player_id;
+    select * into me from fill_queue where player_id = uid;
+    return jsonb_build_object('status', 'match', 'id', me.squad_id, 'seat', me.seat, 'size', me.sz);
+  end if;
+  return jsonb_build_object('status', 'wait', 'waiting', n + 1, 'need', need);
+end $$;
+
+create or replace function public.fill_leave() returns void
+language sql security definer set search_path = public as $$
+  delete from fill_queue where player_id = auth.uid();
+$$;
+
 -- ---------------------------------------------------------------- connection handshake (WebRTC offers, answers, candidates)
 create or replace function public.sig_send(p_room text, p_kind text, p_body jsonb) returns void
 language plpgsql security definer set search_path = public as $$
@@ -300,6 +365,50 @@ begin
     where s.room = p_room and s.id > p_after and s.sender <> uid order by s.id limit 100;
 end $$;
 
+-- ---------------------------------------------------------------- leaderboards (round 22)
+-- Account level from total XP (same curve as js/account.js: level L starts at 100*(L-1) + 5*L*(L-1) XP, max 100).
+create or replace function public.level_of(p_xp bigint) returns int
+language plpgsql immutable set search_path = public as $$
+declare l int := 1;
+begin
+  while l < 100 and p_xp >= 100 * l + 5 * (l + 1) * l loop l := l + 1; end loop;
+  return l;
+end $$;
+
+-- The game reports the player's numbers after online matches and when the leaderboard is opened. Numbers can only go up, and by a limited amount per call.
+-- (These numbers come from the player's browser, so treat the level / wins / kills boards as for fun; the RANK board uses the server-kept rating and cannot be faked.)
+create or replace function public.sync_profile(p_name text, p_xp bigint, p_won int, p_kills int, p_holder boolean) returns void
+language plpgsql security definer set search_path = public as $$
+declare uid uuid := auth.uid(); nm text;
+begin
+  if uid is null then raise exception 'not signed in'; end if;
+  insert into players (id) values (uid) on conflict do nothing;
+  nm := left(regexp_replace(coalesce(p_name, ''), '[^A-Za-z0-9_]', '', 'g'), 16);
+  update players set
+    name = case when length(nm) >= 3 then nm else name end,
+    xp = greatest(xp, least(greatest(coalesce(p_xp, 0), 0), xp + 20000)),
+    games_won = greatest(games_won, least(greatest(coalesce(p_won, 0), 0), games_won + 50)),
+    kills = greatest(kills, least(greatest(coalesce(p_kills, 0), 0), kills + 200)),
+    holder = coalesce(p_holder, false)
+  where id = uid;
+end $$;
+
+-- Top 20 for one board ('rating', 'level', 'wins' or 'kills'), plus the caller's own row if they are further down. Only named players are listed.
+create or replace function public.leaderboard(p_kind text) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare uid uuid := auth.uid(); res jsonb;
+begin
+  if uid is null then raise exception 'not signed in'; end if;
+  if p_kind not in ('rating', 'level', 'wins', 'kills') then raise exception 'bad board'; end if;
+  with r as (
+    select id, name, public.level_of(xp) as level, rating, games_won, kills, holder, xp,
+      row_number() over (order by (case p_kind when 'rating' then rating::bigint when 'level' then xp when 'wins' then games_won::bigint else kills::bigint end) desc, xp desc, created_at) as rnk
+    from players where name is not null)
+  select coalesce(jsonb_agg(jsonb_build_object('rank', rnk, 'name', name, 'level', level, 'rating', rating, 'wins', games_won, 'kills', kills, 'holder', holder, 'me', id = uid) order by rnk), '[]'::jsonb)
+    into res from r where rnk <= 20 or id = uid;
+  return res;
+end $$;
+
 -- ---------------------------------------------------------------- permissions
 -- Internal helpers: nobody can call them from the game.
 revoke execute on function public.apply_match(uuid, uuid) from public, anon, authenticated;
@@ -317,8 +426,13 @@ revoke execute on function public.party_create() from public, anon;
 revoke execute on function public.party_status(text) from public, anon;
 revoke execute on function public.party_join(text) from public, anon;
 revoke execute on function public.party_close(text) from public, anon;
+revoke execute on function public.fill_join(text, boolean) from public, anon;
+revoke execute on function public.fill_leave() from public, anon;
 revoke execute on function public.sig_send(text, text, jsonb) from public, anon;
 revoke execute on function public.sig_poll(text, bigint) from public, anon;
+revoke execute on function public.sync_profile(text, bigint, int, int, boolean) from public, anon;
+revoke execute on function public.leaderboard(text) from public, anon;
+revoke execute on function public.level_of(bigint) from public, anon;
 grant execute on function public.ensure_player() to authenticated;
 grant execute on function public.find_match() to authenticated;
 grant execute on function public.leave_queue() to authenticated;
@@ -329,5 +443,10 @@ grant execute on function public.party_create() to authenticated;
 grant execute on function public.party_status(text) to authenticated;
 grant execute on function public.party_join(text) to authenticated;
 grant execute on function public.party_close(text) to authenticated;
+grant execute on function public.fill_join(text, boolean) to authenticated;
+grant execute on function public.fill_leave() to authenticated;
 grant execute on function public.sig_send(text, text, jsonb) to authenticated;
 grant execute on function public.sig_poll(text, bigint) to authenticated;
+grant execute on function public.sync_profile(text, bigint, int, int, boolean) to authenticated;
+grant execute on function public.leaderboard(text) to authenticated;
+grant execute on function public.level_of(bigint) to authenticated;

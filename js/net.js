@@ -12,25 +12,29 @@ NET.reseed=n=>{rs=(NET.seed|0)+n*7919};
 const r2=v=>Math.round(v*100)/100,lerpA=(a,b,k)=>{let d=b-a;d=Math.atan2(Math.sin(d),Math.cos(d));return a+d*k};
 const wc={},WPN=(id,l)=>{const k=id+':'+l;return wc[k]||(wc[k]=LV.weapon(id,l))};
 
-window.NETH={on:()=>NET.on,rnd:()=>NET.rnd(),
- use:(k,dir)=>{if(NET.on&&dir&&(k==='grenade'||k==='trap'))send({t:'it',k,d:[r2(dir.x),r2(dir.y),r2(dir.z)]})},
+window.NETH={on:()=>NET.on,seed:()=>NET.seed,rnd:()=>NET.rnd(),
+ use:(k,dir)=>{if(NET.on&&dir&&(k==='grenade'||k==='trap'||(window.ITEMS&&ITEMS.def[k])))send({t:'it',k,d:[r2(dir.x),r2(dir.y),r2(dir.z)],p:[r2(P.x),r2(P.y),r2(P.z)]})},
  spot:i=>{if(NET.on&&i>=0)send({t:'sp',i})},
+ fort:o=>{if(NET.on)send(Object.assign({t:'ft'},o))},tm:v=>{if(NET.on)send({t:'tm',v})},role:()=>NET.role,
  end:won=>{const sc=score.slice();score=[0,0];NET.on=false;NET.fin=true;NET.hideHud();resetRound(true);NET.onEnd&&NET.onEnd(won,sc,'normal')}};
 
 // ---- incoming messages
 function onMsg(m){if(!m||typeof m!=='object')return;NET.lastRx=performance.now();
  switch(m.t){
-  case 's':NET.rs={x:m.x,y:m.y,z:m.z,yaw:m.a,pitch:m.p,cr:m.c,vx:m.vx,vz:m.vz,gr:m.g,hp:m.hp,ar:m.ar,sh:m.sh,mel:m.ml,wid:m.w,wl:m.l,at:performance.now(),fresh:true};break;
+  case 's':NET.rs={x:m.x,y:m.y,z:m.z,yaw:m.a,pitch:m.p,cr:m.c,ads:m.d||0,vx:m.vx,vz:m.vz,gr:m.g,hp:m.hp,ar:m.ar,sh:m.sh,mel:m.ml,wid:m.w,wl:m.l,at:performance.now(),fresh:true};break;
   case 'f':if(NET.on&&mode==='play')recvFire(m);break;
   case 'm':if(NET.on&&mode==='play'&&!over&&introT<=0){NET.rcv=true;E.cd.m=0;melee(E,P);NET.rcv=false}break;
   case 'a':if(NET.on&&mode==='play')for(const s of m.s)AS.push({t:s[0],x:s[1],z:s[2],o:E});break;
-  case 'it':if(NET.on&&mode==='play'&&window.BB){const d=new THREE.Vector3(m.d[0],m.d[1],m.d[2]);E.inv=[m.k];NET.rcv=true;BB.use(E,0,d);NET.rcv=false;E.inv=[]}break;
+  case 'it':if(NET.on&&mode==='play'&&window.BB){const d=new THREE.Vector3(m.d[0],m.d[1],m.d[2]),pp=Array.isArray(m.p)&&m.p.length===3&&m.p.every(Number.isFinite)?{x:m.p[0],y:m.p[1],z:m.p[2]}:null;if(!d.toArray().every(Number.isFinite)||typeof m.k!=='string')break;E.inv=[m.k];NET.rcv=true;BB.use(E,0,d,pp);NET.rcv=false;E.inv=[]}break;
   case 'sp':{const s=window.SPOTS&&SPOTS[m.i];if(s&&NET.on){s.on=false;s.m.visible=false;s.t=45}break}
   case 'd':if(!NET.on||mode!=='play')break;
    if(over){ // both fighters went down together: nobody scores, replay the round
     if(NET.myDeath&&performance.now()-NET.myDeath<1500){score[1]=Math.max(0,score[1]-1);$('score').textContent=score[0]+' - '+score[1];say('DOUBLE KO - REPLAY',2)}
     break}
    NET.legit=true;E.hp=0;endRound(P);NET.legit=false;break;
+  case 'ft':if(NET.on&&window.FORT)FORT.remote(m);break;
+  case 'tm':if(window.STORM)STORM.onOpp(m.v);break;
+  case 'xa':case 'xt':if(window.MEME)MEME.onMsg(m);break;
   case 'p':send({t:'q',ts:m.ts});break;
   case 'q':{const v=performance.now()-m.ts;NET.rtt=NET.rtt?NET.rtt*.7+v*.3:v;break}
   default:NET.onFlow&&NET.onFlow(m)}}
@@ -38,24 +42,24 @@ NET.onMsg=onMsg;
 
 function recvFire(m){const w=WPN(m.w,m.l),lat=Math.min(.2,(NET.rtt||60)/2000+((NET.conn&&NET.conn.extra)||0));
  for(const b of m.b){const p=new THREE.Vector3(b[0],b[1],b[2]),v=new THREE.Vector3(b[3],b[4],b[5]),q=new THREE.Vector3(b[6],b[7],b[8]);
-  const me=new THREE.Mesh(w.rocket?rg:bg,w.rocket?rm:bm);me.position.copy(p);me.lookAt(p.clone().add(v));S.add(me);
+  let me;if(window.BV){const dn=v.clone().normalize();me=BV.mk(w,p,dn);if(!recvFire.fx){recvFire.fx=1;BV.fired(E,w,p,dn,1,true)}}else{me=new THREE.Mesh(w.rocket?rg:bg,w.rocket?rm:bm);me.position.copy(p);me.lookAt(p.clone().add(v))}S.add(me);
   p.addScaledVector(v,lat);bl.push({m:me,p,q,v,life:w.life-lat,e:E,w})}
- if(window.SFX&&Math.hypot(P.x-E.x,P.z-E.z)<40)(SFX[w.id]||SFX.rifle)()}
+ recvFire.fx=0;E.rc=1;if(window.SFX&&Math.hypot(P.x-E.x,P.z-E.z)<40)(SFX[w.id]||SFX.rifle)()}
 
 // ---- the opponent: the bot's slot is driven by their reports
 function netBot(dt){const s=NET.rs;if(!s)return;
  const age=Math.min(.25,(performance.now()-s.at)/1000),tx=s.x+s.vx*age,tz=s.z+s.vz*age,k=Math.min(1,1-Math.exp(-dt*16)),far=Math.hypot(tx-E.x,tz-E.z)>5;
  E.x=far?tx:E.x+(tx-E.x)*k;E.z=far?tz:E.z+(tz-E.z)*k;E.y=far?s.y:E.y+(s.y-E.y)*Math.min(1,k*1.5);
- E.yaw=lerpA(E.yaw,s.yaw,Math.min(1,k*1.4));E.pitch+=(s.pitch-E.pitch)*k;E.cr=(E.cr||0)+(s.cr-(E.cr||0))*k;
+ E.yaw=lerpA(E.yaw,s.yaw,Math.min(1,k*1.4));E.pitch+=(s.pitch-E.pitch)*k;E.ads=(E.ads||0)+((s.ads||0)-(E.ads||0))*Math.min(1,k*1.6);E.cr=(E.cr||0)+(s.cr-(E.cr||0))*k;
  E.vx=s.vx;E.vz=s.vz;E.vy=0;E.gr=!!s.gr;E.blk=false;E.mel=!!s.mel;
- if(s.fresh){s.fresh=false;E.hp=s.hp;E.ar=s.ar;E.sh=s.sh;if(s.wid&&(!E.w||E.w.id!==s.wid||(E.w.lv||1)!==s.wl))setW(E,WPN(s.wid,s.wl))}}
+ if(s.fresh){s.fresh=false;E.hp=s.hp;E.ar=s.ar;E.sh=s.sh;if(s.wid&&(!E.w||(E.w.sig||E.w.id)!==s.wid||(E.w.lv||1)!==s.wl))setW(E,WPN(s.wid,s.wl))}}
 
 // ---- wrappers (outermost, installed last)
 const _bot=bot;bot=function(dt){if(NET.on)return netBot(dt);_bot(dt)};
 const _phys=phys;phys=function(e,dt){if(NET.on&&e===E)return;_phys(e,dt)};
 const _fire=fire;fire=function(e,dt0){if(!NET.on)return _fire(e,dt0);if(e===E){if(!NET.rcv)return;return _fire(e,dt0)}
  const n=bl.length;_fire(e,dt0);const b=[];for(let i=n;i<bl.length;i++){const x=bl[i];b.push([r2(x.p.x),r2(x.p.y),r2(x.p.z),r2(x.v.x),r2(x.v.y),r2(x.v.z),r2(x.q.x),r2(x.q.y),r2(x.q.z)])}
- if(b.length)send({t:'f',w:e.w.id,l:e.w.lv||1,b})};
+ if(b.length)send({t:'f',w:e.w.sig||e.w.id,l:e.w.lv||1,b})};
 const _melee=melee;melee=function(e,t){if(!NET.on)return _melee(e,t);if(e===E){if(!NET.rcv)return;return _melee(e,t)}const ready=e.cd.m<=0;_melee(e,t);if(ready)send({t:'m'})};
 const _ability=ability;ability=function(e,dx,dz){if(!NET.on)return _ability(e,dx,dz);if(e===E){if(!NET.rcv)return;return _ability(e,dx,dz)}
  const n=AS.length,had=e.cd.a<=0;_ability(e,dx,dz);if(had&&e.ab==='air'&&AS.length>n)send({t:'a',s:AS.slice(n).map(a=>[r2(a.t),r2(a.x),r2(a.z)])})};
@@ -66,7 +70,7 @@ const _er=endRound;endRound=function(w){if(!NET.on)return _er(w);if(w===P&&!NET.
 const _rr=resetRound;resetRound=function(i){if(NET.on)NET.reseed(NET.rounds++);_rr(i);
  if(NET.on){const h=NET.role==='host',s=h?-22:22;P.x=s;E.x=-s;P.z=E.z=0;yaw=h?-Math.PI/2:Math.PI/2;pitch=0;P.yaw=yaw;E.yaw=h?Math.PI/2:-Math.PI/2;E.cr=0}};
 const _step=step;step=function(dt){_step(dt);if(!NET.on||mode!=='play')return;const n=performance.now();
- if(n-NET.ls>=50){NET.ls=n;send({t:'s',x:r2(P.x),y:r2(P.y),z:r2(P.z),a:r2(P.yaw),p:r2(P.pitch),c:r2(P.cr||0),vx:r2(P.vx),vz:r2(P.vz),g:P.gr?1:0,hp:r2(P.hp),ar:r2(P.ar),sh:r2(P.sh),ml:P.mel?1:0,w:P.w.id,l:P.w.lv||1})}
+ if(n-NET.ls>=50){NET.ls=n;send({t:'s',x:r2(P.x),y:r2(P.y),z:r2(P.z),a:r2(P.yaw),p:r2(P.pitch),c:r2(P.cr||0),d:r2(P.ads||0),vx:r2(P.vx),vz:r2(P.vz),g:P.gr?1:0,hp:r2(P.hp),ar:r2(P.ar),sh:r2(P.sh),ml:P.mel?1:0,w:P.w.sig||P.w.id,l:P.w.lv||1})}
  if(n-NET.lp>=2000){NET.lp=n;send({t:'p',ts:n})}
  if(n-NET.lastRx>9000&&!NET.fin){NET.onDrop&&NET.onDrop('timeout');NET.fin=true}
  hud(n)};
@@ -83,8 +87,8 @@ NET.hideHud=()=>{nh.style.display='none';armed=0;$('nleave').textContent='Leave'
 // ---- start of a match (both players ready): run the normal Fight setup, then swap the bot for the other player
 NET.begin=seed=>{NET.seed=seed;NET.rounds=0;NET.fin=false;NET.on=true;NET.rs=null;NET.ls=NET.lp=0;NET.lastRx=performance.now();NET.rtt=0;
  NET.starting=true;try{$('go').click()}finally{NET.starting=false}
- const o=NET.opp.setup;skin(E,o.f);E.lv=o.lv;E.mx=o.mx;E.sp=o.sp;E.dm=o.dm;E.sa=o.sa;E.inv=[];setW(E,WPN(o.w,o.wl));
- $('n2').textContent=LOOK[o.f].nm.toUpperCase();const im=$('n2').parentNode.querySelector('img');if(im&&window.UIportrait)im.src=UIportrait(o.f);
+ const o=NET.opp.setup;E.skn=(o.k|0);E.fx=window.SHINE?SHINE.valid(o.fx):'';E.mw=window.MW?MW.valid(o.mw):'hammer';skin(E,o.f);E.lv=o.lv;E.hs=LV.hs(o.lv);E.mx=o.mx;E.sp=o.sp;E.dm=o.dm;E.sa=o.sa;E.inv=[];setW(E,WPN(o.w,o.wl));
+ $('n2').textContent=((window.PROFILE&&PROFILE.clean(o.n))||LOOK[o.f].nm).toUpperCase();const im=$('n2').parentNode.querySelector('img');if(im&&window.UIportrait)im.src=UIportrait(o.f);
  resetRound();send({t:'p',ts:performance.now()})};
 // a match that ends because someone left or the connection dropped
 NET.abort=oppLeft=>{const sc=score.slice();if(mode==='play'){mode='over';document.exitPointerLock&&document.exitPointerLock();$('hud').style.display='none'}

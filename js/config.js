@@ -4,4 +4,6 @@
 window.BB_CONFIG={
  SUPABASE_URL:'https://fnkyeacxrpwfmrhxdxik.supabase.co',
  SUPABASE_KEY:'sb_publishable_axpBKDDdcRcopgkCubtDeA_13ivSVCQ',
- NET_MS:100};
+ NET_MS:100,
+ // Memecoin holder check (read-only, optional wallet in the name screen). Paste the token's mint address here at launch; leave empty to switch the check off.
+ TOKEN_MINT:'',MIN_HOLD:0,SOLANA_RPC:'https://api.mainnet-beta.solana.com'};

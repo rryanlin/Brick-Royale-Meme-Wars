@@ -10,14 +10,14 @@ Object.assign(WP,{
  smg:{id:'smg',n:'SMG',rate:.075,dmg:5,spd:65,pel:1,spr:.04,life:.9,auto:1,mag:35,rl:1.3,br:8},
  pistol:{id:'pistol',n:'Pistol',rate:.28,dmg:14,spd:70,pel:1,spr:.01,life:1,mag:12,rl:1.1,br:10},
  tac:{id:'tac',n:'Tactical Shotgun',rate:.35,dmg:6,spd:55,pel:6,spr:.12,life:.3,auto:1,mag:8,rl:2,br:6},
- sniper:{id:'sniper',n:'Sniper Rifle',rate:1.3,dmg:55,spd:140,pel:1,spr:0,life:1.5,mag:4,rl:2.2,br:24}});
+ sniper:{id:'sniper',n:'Sniper Rifle',rate:1.3,dmg:55,spd:140,pel:1,spr:0,life:1.5,mag:1,rl:3.2,br:24}});
 Object.values(WP).forEach(w=>MAG[w.id]=[w.mag,w.rl]);
 // ---------- detailed LEGO-style guns. Barrel points to -Z, grip hangs down (-Y), stock toward +Z.
 // op formats: ['b',w,h,d,x,y,z,color,kind?,tiltX?,round?]  rounded brick
 //             ['c',radius,length,x,y,z,color,kind?]           cylinder along Z
 //             ['k',rFront,rBack,length,x,y,z,color,kind?]     cone/taper along Z (rFront at -Z)
 //             ['s',count,x,y,z0,dz,color]                     row of studs on top
-const rbx=(w,h,d,r)=>{r=Math.min(r,w/2-.001,h/2-.001,d/2-.001);const sh=new THREE.Shape(),x=w/2-r,y=h/2-r;sh.moveTo(-x,-y);sh.lineTo(x,-y);sh.lineTo(x,y);sh.lineTo(-x,y);sh.closePath();
+const rbx=window.rbx=(w,h,d,r)=>{r=Math.min(r,w/2-.001,h/2-.001,d/2-.001);const sh=new THREE.Shape(),x=w/2-r,y=h/2-r;sh.moveTo(-x,-y);sh.lineTo(x,-y);sh.lineTo(x,y);sh.lineTo(-x,y);sh.closePath();
  const g=new THREE.ExtrudeGeometry(sh,{depth:Math.max(.001,d-2*r),bevelEnabled:true,bevelThickness:r,bevelSize:r,bevelSegments:2,curveSegments:3});g.translate(0,0,-(d-2*r)/2);return g};
 const GM={},gm=(c,k='p')=>GM[c+k]||(GM[c+k]=new THREE.MeshPhysicalMaterial(k==='m'?{color:c,metalness:.85,roughness:.3,envMapIntensity:1.1}:k==='t'?{color:c,transparent:true,opacity:.62,roughness:.05,clearcoat:1,envMapIntensity:1.2}:{color:c,roughness:.3,clearcoat:.9,clearcoatRoughness:.1,envMapIntensity:.8}));
 const SG=new THREE.CylinderGeometry(.03,.03,.028,12);
@@ -58,74 +58,108 @@ const GUN={
  rpg:[['c',.14,1.15,0,0,-.2,0x556b2f],['c',.15,.07,0,0,-.55,0x2f3b1c],['c',.15,.07,0,0,.1,0x2f3b1c],['k',.14,.22,.46,0,0,.53,0x333a40],['c',.2,.05,0,0,.78,0x333a40,'m'],
   ['c',.19,.13,0,0,-.83,0x2f3b1c],['k',.01,.185,.46,0,0,-1.08,0xe3000b],['c',.07,.02,0,0,-1.32,0xffd02f],
   ['b',.09,.24,.11,0,-.2,-.12,BLK,'p',.22],['b',.08,.2,.09,0,-.19,-.6,BLK],['b',.05,.14,.04,0,.2,-.25,BLK],['b',.04,.04,.02,0,.28,-.25,0x66ccff,'t'],['b',.06,.04,.2,0,.15,-.3,BLK],...TG(-.13,-.22)]};
+window.GUN=GUN;window.GUNK={BLK,DGY,GRY,SCOPE,TG,RDOT}; // shared parts for newguns.js
+
+const GC=id=>window.SIGDEF&&SIGDEF[id]?SIGDEF[id].cls:window.XW&&XW[id]?XW[id].cls:id; // a signature gun (or one of the new guns in newguns.js) is held, aimed and sounds like its class
 function buildGun(id,raw){const i=new THREE.Group();
- (GUN[id]||GUN.rifle).forEach(o=>{const t=o[0];let m;
+ (GUN[id]||GUN[GC(id)]||GUN.rifle).forEach(o=>{const t=o[0];let m;
   if(t==='b'){m=new THREE.Mesh(rbx(o[1],o[2],o[3],o[10]||.018),gm(o[7],o[8]));m.position.set(o[4],o[5],o[6]);m.rotation.x=o[9]||0}
   else if(t==='c'){const g=new THREE.CylinderGeometry(o[1],o[1],o[2],18);g.rotateX(Math.PI/2);m=new THREE.Mesh(g,gm(o[6],o[7]));m.position.set(o[3],o[4],o[5])}
+  else if(t==='y'||t==='x'){const g=new THREE.CylinderGeometry(o[1],o[1],o[2],18);if(t==='x')g.rotateZ(Math.PI/2);m=new THREE.Mesh(g,gm(o[6],o[7]));m.position.set(o[3],o[4],o[5])} // y: cylinder standing up (shells, knobs), x: cylinder across the gun (side studs, pins)
   else if(t==='k'){const g=new THREE.CylinderGeometry(o[1],o[2],o[3],20);g.rotateX(-Math.PI/2);m=new THREE.Mesh(g,gm(o[7],o[8]));m.position.set(o[4],o[5],o[6])}
   else{const st=new THREE.Group();for(let n=0;n<o[1];n++){const s=new THREE.Mesh(SG,gm(o[6]));s.position.set(o[2],o[3],o[4]+n*o[5]);st.add(s)}i.add(st);return}
   i.add(m)});
- if(raw)return i;const w=new THREE.Group(),c=(window.HOLD&&HOLD.CFG[id])||{sc:.6,g:[.12,-.09]};
+ if(raw)return i;const w=new THREE.Group(),c=(window.HOLD&&HOLD.CFG[GC(id)])||{sc:.6,g:[.12,-.09]};
  // the top of the grip sits at the group origin (where the right hand is); the gun is scaled to minifig size
  i.position.set(0,-c.g[1],-c.g[0]);w.add(i);w.scale.setScalar(c.sc);return w}
 window.buildGun=buildGun;
-function attachGun(e,id){if(e.gun&&e.gun.parent)e.gun.parent.remove(e.gun);e.gun=buildGun(id);(e.aim||e.fa||e.ra).add(e.gun);e.hid=id;window.HOLD&&HOLD.update(e)}
+function attachGun(e,id){if(e.gun&&e.gun.parent)e.gun.parent.remove(e.gun);e.gun=buildGun(id);(e.aim||e.fa||e.ra).add(e.gun);e.hid=GC(id);window.HOLD&&HOLD.update(e)}
 window.attachGun=attachGun;
-setW=function(e,w){e.w=w;attachGun(e,w.id)};
+setW=function(e,w){e.w=w;attachGun(e,w.sig||w.id)};
 setW(P,P.w);setW(E,E.w);
 
 
 
 // ---------- loot bags and items
 const IT=window.IT={grenade:{n:'Grenade',c:0x44aaff,w:16},bandage:{n:'Bandage',c:0xffffff,w:22},medkit:{n:'Medkit',c:0xff3b3b,w:12},
- shield:{n:'Shield Potion',c:0x3399ff,w:18},slurp:{n:'Shield Jar',c:0x66e0ff,w:8},fish:{n:'Fish',c:0xff9a3b,w:14},trap:{n:'Trap',c:0x999999,w:10}};
+ shield:{n:'Shield Potion',c:0x3399ff,w:18},slurp:{n:'Shield Jar',c:0x66e0ff,w:8},fish:{n:'Fish',c:0xff9a3b,w:14},trap:{n:'Trap',c:0x999999,w:10},
+ fort:{n:'Port-a-Fortress',c:0xb08040,w:7}};
 const rr=()=>window.NETH&&NETH.on()?NETH.rnd():Math.random(); // online matches share a seeded generator so both players see the same loot timers
-const roll=()=>{let r=Math.random()*100;for(const k in IT){r-=IT[k].w;if(r<=0)return k}return'bandage'};
+const roll=()=>{let tot=0;for(const k in IT)tot+=IT[k].w;let r=Math.random()*tot;for(const k in IT){r-=IT[k].w;if(r<=0)return k}return'bandage'};
 P.inv=[];E.inv=[];
-const spots=[[-24,-10],[24,10],[-8,22],[8,-22],[-22,22],[22,-22],[0,-5.5],[0,5.5]].map(([x,z])=>{const m=new THREE.Group(),a=new THREE.Mesh(B(.9,.7,.7),M(0x3a6fd8)),b=new THREE.Mesh(B(.94,.18,.74),M(0xffd02f));
- a.position.y=.35;b.position.y=.5;m.add(a);m.add(b);m.position.set(x,0,z);m.visible=false;S.add(m);return{x,z,m,t:10+rr()*12,on:false}});
+const spots=[[0,0]].map(([x,z])=>{const m=new THREE.Group(),a=new THREE.Mesh(B(.9,.7,.7),M(0x3a6fd8)),b=new THREE.Mesh(B(.94,.18,.74),M(0xffd02f));
+ a.position.y=.35;b.position.y=.5;m.add(a);m.add(b);m.position.set(x,0,z);m.visible=true;S.add(m);return{x,z,m,t:0,on:true}});
 window.SPOTS=spots;
 const GR=[],TP=[];
 function throwG(e,d){const m=new THREE.Mesh(new THREE.SphereGeometry(.22,8,6),M(0x44aaff)),p=new THREE.Vector3(e.x,e.y+1.6,e.z).addScaledVector(d,.8);m.position.copy(p);S.add(m);
  GR.push({m,p,v:d.clone().multiplyScalar(17).add(new THREE.Vector3(0,4,0)),t:1.6,o:e})}
-function use(e,i,dir){const k=e.inv[i];if(!k)return;if(e===P&&window.NETH)NETH.use(k,dir);
- if(k==='bandage')e.hp=Math.min(e.mx,e.hp+15);else if(k==='medkit')e.hp=Math.min(e.mx,e.hp+50);else if(k==='fish')e.hp=Math.min(e.mx,e.hp+30);
+function use(e,i,dir,pos){const k=e.inv[i];if(!k)return;if(e===P&&window.NETH)NETH.use(k,dir);
+ const hq=e.hs||1;if(window.ITEMS&&ITEMS.def[k]){if(ITEMS.use(e,k,dir,pos)===false)return}else if(k==='bandage')e.hp=Math.min(e.mx,e.hp+15*hq);else if(k==='medkit')e.hp=Math.min(e.mx,e.hp+50*hq);else if(k==='fish')e.hp=Math.min(e.mx,e.hp+30*hq);
  else if(k==='shield')e.ar=Math.min(50,e.ar+25);else if(k==='slurp')e.ar=50;
  else if(k==='grenade')throwG(e,dir);
+ else if(k==='fort'){if(window.FORT&&FORT.throw(e,dir)===false)return}
  else if(k==='trap'){const m=new THREE.Mesh(B(1.4,.12,1.4),M(0x888888));m.position.set(e.x,e.y+.06,e.z);S.add(m);TP.push({m,x:e.x,z:e.z,y:e.y,o:e,t:.6})}
  e.inv.splice(i,1);if(e===P)say(IT[k].n.toUpperCase(),.7)}
 window.BB={use};
-function botItems(){const d=Math.hypot(P.x-E.x,P.z-E.z),at=k=>E.inv.indexOf(k),dir=new THREE.Vector3(P.x-E.x,.3,P.z-E.z).normalize();
- if(E.hp<55){for(const k of['medkit','fish','bandage']){const i=at(k);if(i>=0)return use(E,i,dir)}}
- if(E.ar<20){for(const k of['slurp','shield']){const i=at(k);if(i>=0)return use(E,i,dir)}}
- if(d>6&&d<18&&Math.random()<.4){const i=at('grenade');if(i>=0)return use(E,i,dir)}
- if(d<10&&Math.random()<.3){const i=at('trap');if(i>=0)return use(E,i,dir)}}
+function botItems(be,bp){const X=be||E,Y=bp||P,d=Math.hypot(Y.x-X.x,Y.z-X.z),at=k=>X.inv.indexOf(k),dir=new THREE.Vector3(Y.x-X.x,.3,Y.z-X.z).normalize();
+ if(X.hp<55){for(const k of['medkit','fish','bandage']){const i=at(k);if(i>=0)return use(X,i,dir)}}
+ if(X.ar<20){for(const k of['slurp','shield']){const i=at(k);if(i>=0)return use(X,i,dir)}}
+ if(d>6&&d<18&&Math.random()<.4){const i=at('grenade');if(i>=0)return use(X,i,dir)}
+ if(d<10&&Math.random()<.3){const i=at('trap');if(i>=0)return use(X,i,dir)}
+ if(window.ITEMS)ITEMS.bot(X,d,dir,at)}
 // hotbar: 1 gun, 2 hammer, 3 4 5 = utility slots (keys read by code so Shift + digit still works while crouching)
 addEventListener('keydown',e=>{if(mode!=='play'||over||introT>0)return;const i={Digit3:0,Digit4:1,Digit5:2,Numpad3:0,Numpad4:1,Numpad5:2}[e.code];if(i!==undefined)use(P,i,C.getWorldDirection(new THREE.Vector3()))});
-const _dmgA=dmg;dmg=function(e,n){const b=e.hp+e.ar;_dmgA(e,n);if(e.hp+e.ar<b)e.hitT=3}; // name and health bar show above a fighter's head only for a few seconds after a hit
+const _dmgA=dmg;dmg=function(e,n){const b=e.hp+e.ar;_dmgA(e,n);if(e.hp+e.ar<b)e.hitT=3.5}; // marks the victim; the opponent's health bar is only drawn for a few seconds after you hit them
 const _rr=resetRound;
-resetRound=function(i){_rr(i);P.inv=[];E.inv=[];P.hitT=E.hitT=0;GR.splice(0).forEach(g=>S.remove(g.m));TP.splice(0).forEach(t=>S.remove(t.m));spots.forEach(s=>{s.on=false;s.m.visible=false;s.t=10+rr()*12})};
+resetRound=function(i){_rr(i);P.inv=[];E.inv=[];P.hitT=E.hitT=0;GR.splice(0).forEach(g=>S.remove(g.m));TP.splice(0).forEach(t=>S.remove(t.m));spots.forEach(s=>{s.on=true;s.m.visible=true;s.t=0})}; // loot bags are there from the start of every round (pickups.js picks where)
 
 // ---------- overhead health bars
-const ob=[P,E].map((e,i)=>{const d=document.createElement('div');d.className='ob'+(i?' foe':'');d.innerHTML='<b></b><div class="h"><i></i></div><div class="a"><i></i></div>';document.body.appendChild(d);return d});
-function bars(){C.updateMatrixWorld();[P,E].forEach((e,i)=>{const d=ob[i],v=new THREE.Vector3(e.x,e.y+2.85-(e.cr||0)*.3,e.z).project(C),show=mode==='play'&&v.z<1&&e.hp>0&&e.hitT>0;
+const ob=[];function obar(i){if(!ob[i]){const d=document.createElement('div');d.className='ob'+(i?' foe':'');d.innerHTML='<b></b><div class="h"><i></i></div><div class="a"><i></i></div>';document.body.appendChild(d);ob[i]=d}return ob[i]}
+function bars(){C.updateMatrixWorld();const L=ENTS();for(let i=L.length;i<ob.length;i++)if(ob[i])ob[i].style.display='none';L.forEach((e,i)=>{const d=obar(i),v=new THREE.Vector3(e.x,e.y+2.85-(e.cr||0)*.3,e.z).project(C),al=i>0&&window.BRX&&BRX.ally&&BRX.ally(P,e),show=mode==='play'&&v.z<1&&e.hp>0&&(i===0||e.hitT>0||al)&&!(i===0&&window.FPV&&FPV.on()); // (a teammate in Duos / Trios always has a teal bar with a star, so you can tell them from enemies) // your own bar is always on (only you see it); the other fighter's bar only shows for a few seconds after you hit them
  d.style.display=show?'block':'none';if(!show)return;d.style.left=(v.x*.5+.5)*innerWidth+'px';d.style.top=(-v.y*.5+.5)*innerHeight+'px';
- d.firstChild.textContent=LOOK[e.id].nm+(e.lv?' Lv'+e.lv:'');d.children[1].firstChild.style.width=e.hp/e.mx*100+'%';d.children[2].firstChild.style.width=e.ar*2+'%'})}
+ d.classList.toggle('ally',!!al);d.classList.toggle('human',!!(al&&e.hu));d.firstChild.textContent=al?(e.hu?'\u2605 ':'\u25C6 ')+(e.bn||LOOK[e.id].nm):(i===0&&window.PROFILE&&PROFILE.name()?PROFILE.name():LOOK[e.id].nm)+(e.lv?' Lv'+e.lv:'');d.children[1].firstChild.style.width=e.hp/e.mx*100+'%';d.children[2].firstChild.style.width=e.ar*2+'%'})}
+
+
+// ---------- walk cycle. Smooth legs that swing with speed (and reverse when backing up), a bob at every footfall, a forward lean, a little
+// hip sway, head that stays level, a landing dip, and recoil. The arms hold the gun by IK (hold.js), so the walk reaches them through the gun:
+// e.wk (walk amount), e.wp (stride phase), e.rc (recoil) are read there and the gun sways with each step with both hands following it.
+function walkAnim(e,dt){if(!e.lg||!e.g)return;
+ const sp0=Math.max(e.sp||9,1),s=e.gr?Math.hypot(e.vx,e.vz):0,tgt=s>.35?Math.min(1.35,s/sp0):0,k=1-Math.exp(-dt*(tgt>(e.wk||0)?12:9));
+ e.wk=(e.wk||0)+(tgt-(e.wk||0))*k;
+ const fw=-Math.sin(e.yaw||0)*e.vx-Math.cos(e.yaw||0)*e.vz,dir=s>.35&&fw<-.35*s?-1:1,sd=s>.35&&Math.abs(fw)<.6*s?1:0; // backing up reverses the legs; sideways steps splay them
+ e.wp=(e.wp||0)+dir*s*dt*1.25;e.rc=Math.max(0,(e.rc||0)-dt*9);
+ const ph=e.wp,a=Math.sin(ph),wk=Math.min(e.wk,1.35),cr=e.cr||0,amp=.8*wk*(1-.45*cr);
+ // landing dip
+ if(e.gr&&!e.wasG)e.lt=Math.min(.2,.05+Math.abs(e.lvy||0)*.01);e.wasG=e.gr;e.lvy=e.vy;e.lt=Math.max(0,(e.lt||0)-dt);
+ if(e.hp<=0)return;
+ if(e.gr){const f=Math.min(1,dt*26);e.lg[0].rotation.x+=(a*amp-e.lg[0].rotation.x)*f;e.lg[1].rotation.x+=(-a*amp-e.lg[1].rotation.x)*f;e.lg[0].rotation.z=sd?(Math.max(0,-a))*.18*wk:0;e.lg[1].rotation.z=sd?(-Math.max(0,a))*.18*wk:0}
+ else{const j=e.vy>0?1:.6;e.lg[0].rotation.x+=((.65*j)-e.lg[0].rotation.x)*Math.min(1,dt*14);e.lg[1].rotation.x+=((-.4*j)-e.lg[1].rotation.x)*Math.min(1,dt*14);e.lg[0].rotation.z=e.lg[1].rotation.z=0}
+ const bob=Math.abs(Math.cos(ph))*.075*wk*(1-.5*cr),dip=Math.sin(Math.min(1,e.lt/.2)*Math.PI/2)*.14*(e.lt>0?1:0);
+ e.g.position.y+=bob-dip;
+ if(e.gr){ // keep the toes and heels out of the floor: a leg swung back or forward tilts the flat shoe, so lift the body by however far the lowest corner of either shoe has sunk
+  const sy=1-.3*cr/.558,yb=-.558*sy;let lo=0;
+  for(const l of e.lg){const th=l.rotation.x,c=Math.cos(th),sn=Math.sin(th);lo=Math.min(lo,.558+yb*c+.315*sn+(bob-dip),.558+yb*c-.225*sn+(bob-dip))}
+  if(lo<0)e.g.position.y+=-lo}
+ e.g.rotation.z=a*.035*wk;                              // hips sway side to side with each step
+ const lean=-(.07+.05*(e.spr?1:0))*wk*(dir>0?1:-.4);    // lean into the run (forward is -z)
+ if(e.bg){e._bl=(e._bl||0)+(lean-(e._bl||0))*Math.min(1,dt*10);e.bg.rotation.x=e._bl+(e._bx||0);e.bg.rotation.y=a*.07*wk} // _bx = the bow of a melee swing (melee.js), kept apart from the running lean
+ if(e.hg){const rx=e.bg?e.bg.rotation.x:0;e.hg.position.z=1.44*Math.sin(rx);e.hg.position.y=e.hy-.3*(e.cr||0)-e.hy*(1-Math.cos(rx)); // the neck sits 1.44 above the hips: the head follows the torso top as the body leans or bows
+  e.hg.rotation.x=-(e.bg?e.bg.rotation.x:0)*.9+Math.abs(Math.cos(ph))*.025*wk} // head stays level and nods a little
+ if(!(e.sw>0||e.mel)){} // gun arms are solved in hold.js
+}
 
 // ---------- step wrapper: loot, grenades, traps, walk cycle
 const _st=step;
-step=function(dt){_st(dt);const act=!over&&introT<=0;for(const e of[P,E])e.hitT=Math.max(0,(e.hitT||0)-dt);
- for(const s of spots){if(!s.on){s.t-=dt;if(s.t<=0){s.on=true;s.m.visible=true}continue}
+step=function(dt){_st(dt);const act=!over&&introT<=0;for(const e of ENTS())e.hitT=Math.max(0,(e.hitT||0)-dt);
+ for(const s of spots){if(!s.on){s.t-=dt;if(s.t<=0){if(window.PK)PK.again(s);s.on=true;s.m.visible=true}continue}
   s.m.rotation.y+=dt*1.5;s.m.position.y=.15+Math.sin(T*3+s.x)*.1;
-  if(act)for(const e of[P,E])if(!(e===E&&window.NETH&&NETH.on())&&e.inv.length<3&&Math.hypot(e.x-s.x,e.z-s.z)<1.5){const got=[];for(let n=0,c=1+(Math.random()<.4);n<c&&e.inv.length<3;n++){let k=roll();if(e.id==='doge'){const k2=roll();if(IT[k2].w<IT[k].w)k=k2}e.inv.push(k);got.push(IT[k].n)}
+  if(act)for(const e of ENTS())if(!(e===E&&window.NETH&&NETH.on())&&e.inv.length<3&&Math.hypot(e.x-s.x,e.z-s.z)<1.5){const got=[];for(let n=0,c=1+(Math.random()<.4);n<c&&e.inv.length<3;n++){let k=roll();if(e.id==='doge'){const k2=roll();if(IT[k2].w<IT[k].w)k=k2}e.inv.push(k);got.push(IT[k].n)}
    s.on=false;s.m.visible=false;s.t=45;if(e===P&&window.NETH)NETH.spot(spots.indexOf(s));if(e===P)say('LOOT: '+got.join(' + '),1.2);break}}
- if(act&&!(window.NETH&&NETH.on())&&((E.bt=(E.bt||0)-dt)<=0)){E.bt=.6;botItems()}
+ if(act&&!(window.NETH&&NETH.on()))for(const b of window.BRX?BRX.bots:[E])if(b.hp>0&&((b.bt=(b.bt||0)-dt)<=0)){b.bt=.6;botItems(b,FOE(b))}
  for(let i=GR.length-1;i>=0;i--){const g=GR[i];g.v.y-=22*dt;g.p.addScaledVector(g.v,dt);if(g.p.y<.2){g.p.y=.2;g.v.y*=-.4;g.v.x*=.7;g.v.z*=.7}
-  if(inBox(g.p)){g.p.addScaledVector(g.v,-dt);g.v.multiplyScalar(-.3)}g.m.position.copy(g.p);g.t-=dt;if(g.t<=0){boom(g.p.clone(),g.o);S.remove(g.m);GR.splice(i,1)}}
- for(let i=TP.length-1;i>=0;i--){const t=TP[i];t.t-=dt;const f=t.o===P?E:P;if(t.t<=0&&act&&Math.hypot(f.x-t.x,f.z-t.z)<1.2&&f.y<t.y+.8){dmg(f,35);S.remove(t.m);TP.splice(i,1)}}
- for(const e of[P,E]){const s=e.gr?Math.hypot(e.vx,e.vz):0;e.wp=(e.wp||0)+s*dt*1.1;e.wa=(e.wa||0)+((s>.5?1:0)-(e.wa||0))*.25;
-  const q=Math.round(Math.sin(e.wp)*3)/3,a=e.gr?q*.75*e.wa:0;e.lg[0].rotation.x=e.gr?a:.5;e.lg[1].rotation.x=e.gr?-a:-.3;e.la.rotation.x=-a*.8;
-  if(e.hp>0){e.g.position.y+=Math.abs(Math.sin(e.wp))*.12*e.wa;e.g.rotation.z=Math.round(Math.sin(e.wp)*2)/2*.05*e.wa}}
- if(window.HOLD)for(const e of[P,E])HOLD.update(e);
+  if(inBox(g.p)){g.p.addScaledVector(g.v,-dt);g.v.multiplyScalar(-.3)}g.m.position.copy(g.p);g.t-=dt;if(g.t<=0){window.FB=1;boom(g.p.clone(),g.o);window.FB=0;S.remove(g.m);GR.splice(i,1)}}
+ for(let i=TP.length-1;i>=0;i--){const t=TP[i];t.t-=dt;if(t.t>0||!act)continue;const f=window.BRX?BRX.nearTo(t.x,t.z,t.o,1.2):(t.o===P?E:P);if(f&&f.hp>0&&Math.hypot(f.x-t.x,f.z-t.z)<1.2&&f.y<t.y+.8){window.DMGSRC=t.o;dmg(f,35*(f.hs||1));window.DMGSRC=null;S.remove(t.m);TP.splice(i,1)}}
+ for(const e of ENTS())walkAnim(e,dt);
+ if(window.HOLD)for(const e of ENTS())HOLD.update(e);
  bars();window.hudUpdate&&hudUpdate()};
 })();

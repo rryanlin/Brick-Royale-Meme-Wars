@@ -11,11 +11,13 @@ const sc=sun.shadow.camera;sc.left=sc.bottom=-42;sc.right=sc.top=42;sc.near=1;sc
 const c=document.createElement('canvas');c.width=2;c.height=256;const g=c.getContext('2d'),gr=g.createLinearGradient(0,0,0,256);
 gr.addColorStop(0,'#2a5f9e');gr.addColorStop(.55,'#7f9fbd');gr.addColorStop(1,'#b7c4cf');g.fillStyle=gr;g.fillRect(0,0,2,256);
 S.background=new THREE.CanvasTexture(c);S.fog=new THREE.Fog(0x8fa6ba,60,170);
+const _g0=S.children.length,GFX0={bg:S.background,fog:S.fog,sunI:sun.intensity,sunP:sun.position.clone(),hemiI:.32};
 const floor=new THREE.Mesh(B(500,1,500),M(0x2a6133));floor.position.y=-1.1;S.add(floor);
 function tree(x,z,s){const t=new THREE.Group(),k=new THREE.Mesh(B(.8*s,2.5*s,.8*s),M(0x8b5a2b));k.position.y=1.25*s;t.add(k);
  [0,1,2].forEach(i=>{const l=new THREE.Mesh(B((3.4-i)*s,1.2*s,(3.4-i)*s),M(i%2?0x2e9b3a:0x1f8a33));l.position.y=(2.9+i*1.1)*s;t.add(l)});t.position.set(x,0,z);S.add(t)}
 for(let i=0;i<26;i++){const a=i/26*Math.PI*2+.1,r=40+(i%3)*7;tree(Math.cos(a)*r,Math.sin(a)*r,1+(i%4)*.25)}
 for(let i=0;i<9;i++){const a=i/9*Math.PI*2,r=95+(i%2)*15,h=14+(i*7%13),w=10+(i%3)*4,m=new THREE.Mesh(B(w,h,w),M([0x7d8794,0x9aa3ad,0x6b7480][i%3]));m.position.set(Math.cos(a)*r,h/2-1,Math.sin(a)*r);S.add(m)}
+window.SCEN0={o:S.children.slice(_g0)};window.GFX0=GFX0;
 const mark=()=>S.traverse(o=>{if(o.isMesh&&!o.userData.sh){o.userData.sh=1;o.castShadow=true;o.receiveShadow=o.parent===S}});
 mark();setInterval(mark,600);
 })();

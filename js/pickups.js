@@ -46,5 +46,5 @@ function ring(x,z,c,owner){const g=new THREE.Group(),r=new THREE.Mesh(new THREE.
  const d=new THREE.Mesh(new THREE.CircleGeometry(.95,32),glow(c,.12));d.rotation.x=-Math.PI/2;d.userData.sh=1;g.add(d);g.position.set(x,.05,z);S.add(g);rings.push({g,o:owner,x})}
 chests.forEach(c=>{clear(c.m);c.k==='h'?healthModel(c.m):shieldModel(c.m);ring(c.x,c.z,c.k==='h'?0x3dff6a:0x4aa8ff,c)});
 SPOTS.forEach(s=>{clear(s.m);bagModel(s.m);ring(s.x,s.z,0xffd02f,s)});
-const _st=step;step=function(dt){_st(dt);for(const r of rings){r.g.visible=r.o.m.visible;r.g.scale.setScalar(1+.07*Math.sin(T*3+r.x))}};
+const _st=step;step=function(dt){_st(dt);for(const r of rings){r.g.visible=r.o.m.visible;r.g.position.set(r.o.x,.05,r.o.z);r.g.scale.setScalar(1+.07*Math.sin(T*3+r.o.x))}};
 })();

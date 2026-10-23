@@ -1,5 +1,6 @@
 /* Town: buildings made of real brick courses (running bond, seams, top studs), solid corners with no gaps, stepped brick roofs, fences and crates. */
 (()=>{
+const _t0=S.children.length,_tb=boxes.length;
 const vis=(w,h,d,x,y,z,c)=>{const m=new THREE.Mesh(B(w,h,d),M(c));m.position.set(x,y,z);S.add(m);return m},F=0xf2f2f2;
 const INS={},STD={},addI=(c,x,y,z,sx,sy,sz)=>(INS[c]||(INS[c]=[])).push([x,y,z,sx,sy,sz]),addS=(c,x,y,z)=>(STD[c]||(STD[c]=[])).push([x,y,z]);
 const shade=(c,f)=>{const r=Math.round((c>>16&255)*f),g=Math.round((c>>8&255)*f),b=Math.round((c&255)*f);return r<<16|g<<8|b};
@@ -8,7 +9,7 @@ function flush(){const o=new THREE.Object3D(),sg=new THREE.CylinderGeometry(.2,.
  o.scale.set(1,1,1);for(const c in STD){const a=STD[c],im=new THREE.InstancedMesh(sg,M(+c),a.length);a.forEach(([x,y,z],i)=>{o.position.set(x,y,z);o.updateMatrix();im.setMatrixAt(i,o.matrix)});S.add(im)}}
 // a rectangle of brick courses; solid collider when col is set
 function wallRect(x1,x2,z1,z2,h,c,col,y0,st){const lx=x2-x1,lz=z2-z1,ax=lx>=lz,L=ax?lx:lz,t=ax?lz:lx,cx=(x1+x2)/2,cz=(z1+z2)/2;
- if(col===2)boxes.push({x1,x2,z1,z2,y0,h:y0+h}); // bullet-only (door lintel)
+ if(col===2||col===3)boxes.push({x1,x2,z1,z2,y0,h:y0+h}); // door lintel / roof layer: solid for bullets and fighters (you walk under a lintel, stand on a roof)
  else if(col)boxes.push({x1,x2,z1,z2,h:y0+h});
  const nc=Math.max(1,Math.round(h/.64)),ch=h/nc,n=Math.max(1,Math.round(L/2)),l=L/n;
  for(let k=0;k<nc;k++){const y=y0+(k+.5)*ch;let b=[];for(let i=0;i<=n;i++)b.push(i*l);
@@ -28,10 +29,11 @@ function house(cx,cz,w,d,h,door,wc,rc,lean){const t=.5,dw=2.6,hx=w/2,hz=d/2,nc=M
   else{wallRect(x1,x2,z1,z2,h,wc,1,0,1);const n=Math.max(1,Math.floor(L/4.2));for(let i=0;i<n;i++){const p=(i-(n-1)/2)*4;ax?win(mid+p,1.7,face+out,1):win(face+out,1.7,mid+p,0)}}}
  // stepped brick roof
  const ov=.4,rw=w+2*ov;let top;
- if(lean){const k=3,sp=d+2*ov;for(let j=0;j<k;j++){wallRect(cx-rw/2,cx+rw/2,cz-hz-ov,cz-hz-ov+sp*(1-j/k),.5,rc,0,h+j*.5,j===k-1);top=h+(j+1)*.5}}
- else{const k=Math.max(3,Math.round(hz/.9)),s=(hz+ov)/k;for(let j=0;j<k;j++){const zs=(hz+ov)-j*s;wallRect(cx-rw/2,cx+rw/2,cz-zs,cz+zs,.5,rc,0,h+j*.5,j===k-1)}top=h+k*.5;
-  const n=Math.ceil((top-h+.9)/.5);for(let i=0;i<n;i++)addI(0x8a3b2a,cx+w*.25,h+.5+(i+.5)*.5,cz-.3,.85,.47,.85);addI(0x5c2a1e,cx+w*.25,h+.5+n*.5+.1,cz-.3,1.05,.2,1.05)}
- boxes.push({x1:cx-rw/2,x2:cx+rw/2,z1:cz-hz-ov,z2:cz+hz+ov,y0:h,h:top+.2})}
+ if(lean){const k=3,sp=d+2*ov;for(let j=0;j<k;j++){wallRect(cx-rw/2,cx+rw/2,cz-hz-ov,cz-hz-ov+sp*(1-j/k),.5,rc,3,h+j*.5,j===k-1);top=h+(j+1)*.5}}
+ else{const k=Math.max(3,Math.round(hz/.9)),s=(hz+ov)/k;for(let j=0;j<k;j++){const zs=(hz+ov)-j*s;wallRect(cx-rw/2,cx+rw/2,cz-zs,cz+zs,.5,rc,3,h+j*.5,j===k-1)}top=h+k*.5;
+  const n=Math.ceil((top-h+.9)/.5);for(let i=0;i<n;i++)addI(0x8a3b2a,cx+w*.25,h+.5+(i+.5)*.5,cz-.3,.85,.47,.85);addI(0x5c2a1e,cx+w*.25,h+.5+n*.5+.1,cz-.3,1.05,.2,1.05);
+  boxes.push({x1:cx+w*.25-.45,x2:cx+w*.25+.45,z1:cz-.3-.45,z2:cz-.3+.45,y0:h+.5,h:h+.5+n*.5+.2})} // the chimney is solid too
+ }
 function fence(x1,z1,x2,z2){const ax=Math.abs(x2-x1)>=Math.abs(z2-z1),T=.125,L=ax?Math.abs(x2-x1):Math.abs(z2-z1),n=Math.max(1,Math.floor(L/2));
  if(ax){wallRect(Math.min(x1,x2),Math.max(x1,x2),z1-T,z1+T,1.1,0xa57c45,1,0,1);for(let i=0;i<=n;i++)addI(0x6b4c25,Math.min(x1,x2)+i*L/n,.75,z1,.3,1.5,.3)}
  else{wallRect(x1-T,x1+T,Math.min(z1,z2),Math.max(z1,z2),1.1,0xa57c45,1,0,1);for(let i=0;i<=n;i++)addI(0x6b4c25,x1,.75,Math.min(z1,z2)+i*L/n,.3,1.5,.3)}}
@@ -44,4 +46,5 @@ house(0,-24,10,5,3.6,'s',0xb03a2e,0x4a5057);
 fence(-6,-8,6,-8);fence(-6,8,6,8);fence(-18,-4,-18,4);fence(18,-4,18,4);
 [[-3,3],[3,-3],[-10,0],[10,0]].forEach(([x,z])=>wallRect(x-.8,x+.8,z-.8,z+.8,1.2,0x9a6b3a,1,0,0));
 flush();
+window.TOWN={o:S.children.slice(_t0),b:boxes.slice(_tb)}; // lets the other maps hide the town
 })();

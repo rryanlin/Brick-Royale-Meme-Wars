@@ -11,19 +11,20 @@ const SFX={rifle:()=>tone(420,.07,'square',.04,-250),shotgun:()=>tone(160,.2,'sa
 window.SFX=SFX;
 const MAG=window.MAG={},key=e=>e.w.id,mg=e=>[e.w.mag||MAG[e.w.id][0],e.w.rl||MAG[e.w.id][1]]; // mag/reload come from the weapon object, so gun levels can change them
 function am(e){if(e.ammoW!==e.w){e.ammoW=e.w;e.ammo=mg(e)[0];e.rl=0}}
-function pop(n){const v=new THREE.Vector3(E.x,E.y+2.8,E.z).project(C);if(v.z>1)return;const d=document.createElement('div');d.className='pop';d.textContent=Math.round(n);
+function pop(n,t){t=t||E;const v=new THREE.Vector3(t.x,t.y+2.8,t.z).project(C);if(v.z>1)return;const d=document.createElement('div'),hs=!!window.HSHOT;d.className='pop'+(hs?' hs':'');d.textContent=Math.round(n)+(hs?'!':'');
  d.style.left=(v.x*.5+.5)*innerWidth+'px';d.style.top=(-v.y*.5+.5)*innerHeight+'px';$('hud').appendChild(d);setTimeout(()=>d.remove(),700)}
-function marker(){window.XH&&XH.hit()}
+function marker(pw){window.XH&&XH.hit(pw||1)}
 
 const _shoot=shoot;
 shoot=function(e,dir){am(e);if(e.rl>0||e.cd.f>0)return;if(e.ammo<=0){e.rl=mg(e)[1];return}
- e.ammo--;_shoot(e,dir);if(e===P||Math.hypot(P.x-e.x,P.z-e.z)<30)(SFX[key(e)]||SFX.rifle)();if(e.ammo<=0)e.rl=mg(e)[1]};
+ e.ammo--;_shoot(e,dir);e.rc=1;if(e===P||Math.hypot(P.x-e.x,P.z-e.z)<30)(SFX[key(e)]||SFX.rifle)();if(e.ammo<=0)e.rl=mg(e)[1]};
 
 const _dmg=dmg;
 dmg=function(e,n){const before=e.hp+e.ar;_dmg(e,n);const t=before-(e.hp+e.ar);if(t<=0)return;
- if(e===E){pop(t);marker();SFX.hit()}else{shake=Math.max(shake,.3);SFX.hurt()}};
+ if(e!==P&&(!window.BRX||window.DMGSRC===P)){pop(t,e);marker(window.HSHOT?1.35:1);SFX.hit();if(window.HSHOT)setTimeout(()=>SFX.hit(),55)}else if(e===P){shake=Math.max(shake,.3);SFX.hurt()}};
 
 const _boom=boom;
+window.__shake=v=>{shake=Math.max(shake,v)};
 boom=function(p,o){_boom(p,o);SFX.boom();shake=Math.max(shake,Math.max(0,.7-p.distanceTo(C.position)/35))};
 
 const _melee=melee;
@@ -45,9 +46,9 @@ step=function(dt){
  if(!over&&introT<=0&&E.gr&&((E.dq=(E.dq||0)-dt)<=0)){
   for(const b of bl){if(b.e!==P)continue;const dx=E.x-b.p.x,dy=E.y+1.2-b.p.y,dz=E.z-b.p.z,d=Math.hypot(dx,dy,dz)||1;
    if(d<9&&(dx*b.v.x+dy*b.v.y+dz*b.v.z)/(d*b.v.length())>.9){E.vy=10;E.dq=1.2;
-    if(E.cd.a<=0&&E.ab==='dash'){const h=Math.hypot(dx,dz)||1,s=Math.random()<.5?1:-1;ability(E,-dz/h*s,dx/h*s)}break}}}
+    if(E.cd.a<=0&&(E.ab==='dash'||E.ab==='frog'||E.ab==='rush')){const h=Math.hypot(dx,dz)||1,s=Math.random()<.5?1:-1;ability(E,-dz/h*s,dx/h*s)}break}}}
  _step(dt);
- for(const e of[P,E]){am(e);if(e.rl>0){e.rl-=dt;if(e.rl<=0){e.ammo=mg(e)[0];e.rl=0}}}
+ for(const e of ENTS()){am(e);if(e.rl>0){e.rl-=dt;if(e.rl<=0){e.ammo=mg(e)[0];e.rl=0}}}
  if(shake>0){C.position.x+=(Math.random()-.5)*shake;C.position.y+=(Math.random()-.5)*shake;shake=Math.max(0,shake-dt*1.6)}
  $('wn').textContent=P.w.n+'  '+(P.rl>0?'RELOADING':P.ammo+'/'+mg(P)[0])+(P.cd.m>0?'':'  |  Hammer ready');
 };
